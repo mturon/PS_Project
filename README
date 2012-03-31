@@ -1,0 +1,88 @@
+
+-- Code used to retrieve costs loaded in RS6000 
+-- Steps
+-- (1) Grab PRODUCT table and breaks out Product ID and DC number
+-- (2) Add USN to product IDs and create RS cost table
+
+Use ODS_Staging
+
+go
+--Step 1: Prep PRODUCT table to break out Product ID and DC number
+drop table #temp
+
+go
+
+select 
+	Case
+		when (CHARINDEX('*',a.Product_ID) - 1) < 0
+		then NULL
+		else left(a.product_ID,(CHARINDEX('*',a.Product_ID) - 1)) 
+	end as ProdID
+	,Case
+		when (CHARINDEX('*',a.Product_ID) - 1) < 0
+		then null
+		else right(a.Product_ID,(len(a.Product_ID) - CHARINDEX('*',a.Product_ID))) 
+	end as DC_RRC
+	,a.*
+	,b.CURR_LIST
+	,b.OLD_LIST
+	,b.BASIS_3
+	,b.NEW_COST
+	,b.NEW_LIST
+	,b.REP_COST
+	,b.AVG_COST
+	,b.STD_COST
+	,b.BASIS_9
+	,b.BASIS_10
+	,b.BASIS_11
+	,b.BASIS_12
+	,b.BASIS_13
+	,b.UNSHELTERED_REPL_COST
+	,b.LANDED_COST
+
+into #temp
+from
+	ODS_staging.dbo.raw_UniData_Product a
+	left join ods_Staging.dbo.raw_UniData_Product_Price_Basis b on a.Product_ID = b.PRODUCT_ID
+/*Needs to be refreshed by Matt if we want unsheltered cost*/  --	Left outer join TSF_Research.dbo.RS6000_UnSheltered_Cost b on a.Product_ID = b.Product_ID
+where
+	ISNULL(SPEC_CODE,'') <> 'MP'  --creates a magical column that turns spec_code into a new column and turns Nulls in blanks cause igor hates the null logic :), then filters out MP  
+	
+
+go
+
+
+--Step 2: Append USN and create Cost Table
+
+--Drop table TSF_Research.dbo.RS6000_cost_table_120328
+
+go
+
+Select 
+	b.USN_ALT_PN_ID as USN
+	,a.ProdID
+	,a.DC_RRC
+	,a.Product_ID
+	,a.Replacement_Cost
+	,a.Average_Cost
+	,a.Standard_Cost
+	,a.Unsheltered_Avg_Cost
+	,a.Previous_Old_Cost
+	,a.Non_Inventory_Cost
+	,a.Future_Cost
+	,a.Future_Cost_Effective_Date
+	,a.PGROUP
+	,a.NEW_PGROUP
+	,a.OLD_PGROUP
+	,a.ACE_PGROUP
+	,a.AMSAN_PGROUP
+	,a.AC4_AMICO_PGROUP
+
+
+into TSF_Research.dbo.RS6000_cost_table_120328
+from 
+	#temp a
+	left outer join
+	ODS_Staging.dbo.raw_UniData_Product_Header b on a.ProdID = b.PH_ID
+
+
