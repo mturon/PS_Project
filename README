@@ -2,7 +2,8 @@
 -- Code used to retrieve costs loaded in RS6000 
 -- Steps
 -- (1) Grab PRODUCT table and breaks out Product ID and DC number
--- (2) Add USN to product IDs and create RS cost table
+-- (2) Add unsheltered costs and USN to product IDs and create RS cost table
+-- (3) Calculates Sheltered_Load_Percent field
 
 Use ODS_Staging
 
@@ -48,13 +49,13 @@ from
 where
 	ISNULL(SPEC_CODE,'') <> 'MP'  --creates a magical column that turns spec_code into a new column and turns Nulls in blanks cause igor hates the null logic :), then filters out MP  
 	
-
+select top 100 * from #temp
 go
 
 
 --Step 2: Append USN and create Cost Table
 
---Drop table TSF_Research.dbo.RS6000_cost_table_120328
+--Drop table TSF_Research.dbo.RS6000_cost_table_120331
 
 go
 
@@ -64,6 +65,8 @@ Select
 	,a.DC_RRC
 	,a.Product_ID
 	,a.Replacement_Cost
+	,a.Unsheltered_Repl_cost
+	,cast(null as numeric(18,5)) as Sheltered_Load_Percent  
 	,a.Average_Cost
 	,a.Standard_Cost
 	,a.Unsheltered_Avg_Cost
@@ -79,10 +82,27 @@ Select
 	,a.AC4_AMICO_PGROUP
 
 
-into TSF_Research.dbo.RS6000_cost_table_120328
+into TSF_Research.dbo.RS6000_cost_table_120331
 from 
 	#temp a
 	left outer join
 	ODS_Staging.dbo.raw_UniData_Product_Header b on a.ProdID = b.PH_ID
 
+go
+
+--Step 3: Calculate Sheltered_Load_Percent
+
+--Sets unsheltered costs that are 0 to null
+update TSF_Research.dbo.RS6000_cost_table_120331
+set
+	Unsheltered_Repl_cost = null
+where
+	Unsheltered_Repl_cost = 0
+go
+
+--Calculated shelter load
+update TSF_Research.dbo.RS6000_cost_table_120331
+set
+	Sheltered_Load_Percent  = (Replacement_Cost - Unsheltered_Repl_cost) / Unsheltered_Repl_cost
+	
 
